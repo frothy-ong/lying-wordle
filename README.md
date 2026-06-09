@@ -1,38 +1,86 @@
-# WORDLE? (The One That Lies)
+# WORDLE? (Lying Wordle)
 
-A single-player, time-constrained word-guessing game based on the standard Wordle format, but with a deceptive feedback loop. 
+A single-player, time-constrained Wordle variant featuring a deceptive feedback mechanism, dynamic environment modifiers, and multiple game modes. 
 
-## About This Project
-
-> I coded this entirely with Claude and Gemini, because I could not be bothered to learn anything related to html or node or anything front end.
+---
 
 ## Core Game Mechanics
 
-The application modifies traditional word-guessing rules by introducing the following systems:
+The application modifies standard word-guessing rules by introducing randomized deception, localized state manipulation, and strict temporal penalties.
 
-*   **Deceptive Feedback (Lying):** When you submit a valid 5-letter guess, there is a 60% probability that the game will return false tile color indicators. 
-    *   44% chance of exactly 1 false tile.
-    *   15% chance of 2 false tiles.
-    *   1% chance that all 5 tiles lie to you.
-*   **Auto-Correction Delay:** The game does not permanent lie. Falsified tile colors are governed by a countdown tracker and will automatically revert to their true state after exactly 45 seconds. When a correction occurs, the on-screen keyboard colors update automatically.
-*   **Time Constraints:** You have exactly 90 seconds to solve the puzzle. As the timer counts down, the visual interface changes:
-    *   **Under 25 seconds:** The timer text changes color and pulses.
-    *   **Under 10 seconds:** The screen begins to shudder, audio ticks speed up, and scanlines become denser to indicate urgency.
-    *   **Timeout (0 seconds):** The game immediately ends, triggers a visual strobe/glitch effect, and locks the board.
-*   **Incremental Hints:** Hints are not available immediately. They unlock sequentially as the timer crosses specific thresholds: 70 seconds, 45 seconds, and 20 seconds. Activating a hint auto-fills a random empty position with the correct letter, highlighted with a distinct blue glow.
-*   **Audio Engine:** Built entirely via the native Web Audio API, generating specific oscillator tones (sine and sawtooth) for key taps, invalid inputs, hint unlocks, lie exposures, and game outcomes.
+### 1. The Deception Engine
+When a non-winning guess is submitted, the game may deliberately serve false tile color indicators (inverting or swapping Correct, Present, and Absent states). 
 
-## Technical Stack
+| Metric | Normal / Endless Mode | Hard Mode |
+| :--- | :--- | :--- |
+| **0 Lies (True State)** | 40% probability | 20% probability |
+| **1 False Tile** | 44% probability | 64% probability |
+| **2 False Tiles** | 15% probability | 15% probability |
+| **5 False Tiles (Full Lie)** | 1% probability | 1% probability |
+| **Auto-Correction Delay** | 45 seconds | 30 seconds |
 
-*   **Framework:** React (Functional components, `useReducer` state management)
-*   **Build Tool:** Vite
-*   **Styling:** Pure CSS-in-JS with dynamic keyframe injections
-*   **Audio:** Web Audio API (Synthesized oscillators, no external audio files)
+* **Signal Correction:** Falsified tiles are bound to a timestamp tracker. Upon expiration of the delay window, tiles revert to their true scoring state, and the keyboard matrix updates to reflect accurate historical data.
+
+### 2. Time Constraints & Dynamic Interface
+The user must solve the puzzle before the countdown reaches zero. The interface escalates visual feedback based on remaining time:
+* **<= 25 Seconds:** Timer text shifts to amber and pulses.
+* **<= 10 Seconds:** Interface triggers a CSS shudder effect, audio ticks accelerate, and terminal scanlines become dense.
+* **Timeout (0 Seconds):** Triggers an immediate full-screen red strobe animation, sounds a low-frequency alarm, locks input, and exposes the target word.
+
+### 3. Progressive Hint System
+Hints auto-fill a single random empty slot with the correct character, styled with a distinct blue glow. Availability depends strictly on the active mode:
+* **Normal:** Unlocks at 70, 45, and 20 seconds remaining.
+* **Hard:** Single hint unlocks at 15 seconds remaining.
+* **Endless:** Unlocks systematically every 36 seconds.
+
+---
+
+## Game Modes
+
+* **NORMAL:** 90-second limit, 7 maximum guess rows. Standard scoring applies.
+* **HARD:** 45-second limit, 6 maximum guess rows. Higher deception probability, shorter correction window (30s), and reduced hint availability.
+* **ENDLESS:** 90-second baseline. Solving a word adds 45 seconds to the clock and shifts the target. Guess history scrolls dynamically, rendering a maximum of 6 rows at any given time to preserve layout bounds.
+
+---
+
+## Modifiers
+
+Modifiers can be combined at launch to alter peripheral mechanics:
+
+* **FLASHLIGHT:** Restricts vertical visibility. Rows older than the 2 most recent entries are given an opacity value of 0.
+* **SCRAMBLE:** Disables standard layout keyboard and physical computer keyboard input. Displays a flat, randomized 26-key block that reshuffles its position entirely after every submission.
+* **ABJAD:** Implements Abjad linguistic rules. All vowels (`A`, `E`, `I`, `O`, `U`) bypass standard color checking and are hard-coded to return a specific "Vowel" layout color state, masking their true position or presence.
+
+---
+
+## Technical Architecture
+
+### State Management
+The application logic runs entirely through a centralized React `useReducer` architecture. Side effects, clock ticks, audio intervals, and LocalStorage updates for tracking high scores/streaks are isolated within dedicated `useEffect` blocks.
+
+### Scoring Formulations
+Scores are computed dynamically based on attempts ($A$), time remaining ($T$), lies encountered ($L$), hints used ($H$), and current win-streak ($S$):
+
+* **Normal Mode Formula (Win):**
+  $$V = 1000 - (100 \times A) + (5 \times T) + (50 \times L)$$
+  $$\text{Final Score} = (V \times (1 - 0.16 \times H)) \times 1.4^S$$
+* **Normal Mode Formula (Loss):**
+  $$\text{Penalty} = 250 \times 1.8^S$$
+* **Endless Mode Formula (Per Word):**
+  $$\text{Score} = (500 + \max(0, 300 - (50 \times A)) + (50 \times L)) \times (1 - 0.08 \times H) \times 1.2^S$$
+
+### Audio Pipeline
+Synthesized via the browser's native **Web Audio API**. It does not download external assets. Audio tasks dynamically initialize an `AudioContext` and instantiate short-lived oscillator nodes (`sine`, `square`, `sawtooth`) paired with exponential gain decay envelopes.
+
+---
 
 ## Local Development
 
-To run this project locally:
+### Prerequisites
+* Node.js (v18.0.0 or higher recommended)
+* npm or equivalent package manager
 
+### Deployment Steps
 1. Clone the repository.
 2. Install dependencies: `npm install`
 3. Start the local development server: `npm run dev`
