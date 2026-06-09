@@ -14,8 +14,8 @@ const WORDS = [...new Set(POOL.trim().split(/\s+/).filter(w => w.length === 5).m
 const WL          = 5;     // Word length
 const ROWS        = 7;     // Maximum number of guess rows
 const LP          = 0.25;  // Probability of a *second* lie on any guess (first is always guaranteed)
-const TIMER_INIT  = 150;   // Starting countdown in seconds
-const LIE_REVEAL  = 60;    // Seconds of real time before a lie auto-corrects
+const TIMER_INIT  = 90;   // Starting countdown in seconds
+const LIE_REVEAL  = 45;    // Seconds of real time before a lie auto-corrects
 
 // Hints are NOT given upfront — they unlock one at a time as the timer
 // crosses these thresholds (seconds remaining on the countdown).
@@ -123,22 +123,30 @@ function score(guess, target) {
 
 /** Returns a clean initial game state (used on first load and on reset). */
 function freshState() {
+  const target = WORDS[Math.floor(Math.random() * WORDS.length)];
+  
+  // 15% chance for the correct target, 85% chance for a random word
+  const flavorWord = Math.random() < 0.15 
+    ? target 
+    : WORDS[Math.floor(Math.random() * WORDS.length)];
+
   return {
-    target          : WORDS[Math.floor(Math.random() * WORDS.length)],
-    guesses         : [],      // Array of { w, disp, trueDisp, lies, lieRevealAt }
-    input           : Array(WL).fill(""),  // Letters typed in the current row (array of 5)
+    target          : target,
+    flavorText      : `IT'S ${flavorWord}, TRUST ME`,
+    guesses         : [],      
+    input           : Array(WL).fill(""),  
     over            : false,
     won             : false,
     timedOut        : false,
     message         : "",
-    persist         : false,   // If true, the message survives UNSHAKE / CLEAR_MSG
-    km              : {},      // Keyboard colour map: letter → best tile state so far
-    shakeRow        : -1,      // Row index currently playing shake animation
+    persist         : false,   
+    km              : {},      
+    shakeRow        : -1,      
     timeLeft        : TIMER_INIT,
     timerStarted    : false,
-    hintsLeft       : 0,              // starts at 0 — hints unlock over time
-    hintsUnlocked   : 0,              // how many HINT_THRESHOLDS have been crossed
-    hintedPositions : [],             // column indices in the *current* row filled by hints
+    hintsLeft       : 0,              
+    hintsUnlocked   : 0,              
+    hintedPositions : [],             
   };
 }
 
@@ -178,7 +186,7 @@ function reducer(s, a) {
     }
 
     // ── Player submits a guess ─────────────────────────────────────
-    case "SUBMIT": {
+case "SUBMIT": {
       if (s.over) return s;
 
       if (s.input.some(c => c === ""))
@@ -201,21 +209,46 @@ function reducer(s, a) {
       };
 
       if (!won) {
-        const [r1, r2, r3, r4, r5] = a.rand;
+        // roll determines lie count, r1 and r2 pick the target indices
+        const [roll, r1, r2] = a.rand;
+        let numLies = 0;
 
-        // First lie
-        const ti1 = Math.floor(r1 * WL);
-        disp[ti1] = getLieColor(trueS[ti1]);
-        lieRevealAt[ti1] = Date.now() + LIE_REVEAL * 1000;
-        lies = 1;
+        if (roll < 0.40) {
+          numLies = 0; // 40% chance: 0 lies
+        } else if (roll < 0.84) {
+          numLies = 1; // 44% chance: 1 lie
+        } else if (roll < 0.99) {
+          numLies = 2; // 15% chance: 2 lies
+        } else {
+          numLies = 5; // 1% chance: 5 lies
+        }
 
-        // Second lie
-        if (r3 < LP) {
-          const others = [0,1,2,3,4].filter(i => i !== ti1);
-          const ti2    = others[Math.floor(r4 * others.length)];
-          disp[ti2]    = getLieColor(trueS[ti2]);
-          lieRevealAt[ti2] = Date.now() + LIE_REVEAL * 1000;
-          lies = 2;
+        if (numLies > 0) {
+          if (numLies === 5) {
+            // Apply lies to all 5 tiles
+            for (let i = 0; i < WL; i++) {
+              disp[i] = getLieColor(trueS[i]);
+              lieRevealAt[i] = Date.now() + LIE_REVEAL * 1000;
+            }
+            lies = 5;
+          } else {
+            // Pool of valid indices to lie about
+            const availableIndices = [0, 1, 2, 3, 4];
+            const randPicks = [r1, r2];
+
+            // Apply lies to 1 or 2 unique tiles
+            for (let i = 0; i < numLies; i++) {
+              const pickIdx = Math.floor(randPicks[i] * availableIndices.length);
+              const targetIdx = availableIndices[pickIdx];
+              
+              // Remove the used index so it cannot be selected twice
+              availableIndices.splice(pickIdx, 1);
+
+              disp[targetIdx] = getLieColor(trueS[targetIdx]);
+              lieRevealAt[targetIdx] = Date.now() + LIE_REVEAL * 1000;
+              lies++;
+            }
+          }
         }
       }
 
@@ -248,7 +281,7 @@ function reducer(s, a) {
         hintedPositions : [],
       };
     }
-	
+
     // ── Countdown tick (called every 1 000 ms) ─────────────────────
     case "TICK": {
       if (!s.timerStarted || s.over) return s;
@@ -592,7 +625,7 @@ export default function LyingWordle() {
           fontSize: "0.5rem", letterSpacing: "0.38em",
           color: T.sub, marginBottom: 5, textTransform: "uppercase",
         }}>
-          Signal Corrupted
+          {s.flavorText}
         </div>
         <h1 style={{
           margin: 0, fontSize: "2rem", letterSpacing: "0.14em",
